@@ -1,0 +1,38 @@
+{
+  "name": "ils-verification-bot-backend",
+  "version": "1.0.0",
+  "description": "ILS Document Verification Bot - Backend API",
+  "main": "src/api/server.js",
+  "scripts": {
+    "start": "node src/api/server.js",
+    "dev": "nodemon src/api/server.js",
+    "test": "node test-cli.js",
+    "test:browser": "node -e \"require('./test-cli').testBrowser()\"",
+    "test:login": "node -e \"require('./test-cli').testLogin()\""
+  },
+  "keywords": [
+    "automation",
+    "puppeteer",
+    "document-verification",
+    "ils"
+  ],
+  "author": "KBMTI",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "exceljs": "^4.4.0",
+    "express": "^4.18.2",
+    "pdf-parse": "^1.1.1",
+    "puppeteer": "^24.26.1",
+    "string-similarity": "^4.0.4",
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
