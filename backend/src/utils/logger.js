@@ -66,6 +66,13 @@ class Logger {
     const logMessage = this.formatMessage('ERROR', message, data);
     console.log('\x1b[31m%s\x1b[0m', logMessage); // Red
     this.writeToFile(logMessage);
+    
+    // If data is an Error object, log stack trace
+    if (data instanceof Error) {
+      const stackTrace = `[${this.getTimestamp()}] [STACK] ${data.stack}`;
+      console.log('\x1b[31m%s\x1b[0m', stackTrace);
+      this.writeToFile(stackTrace);
+    }
   }
 
   debug(message, data = null) {

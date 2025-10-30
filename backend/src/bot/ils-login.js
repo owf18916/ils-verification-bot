@@ -2,6 +2,7 @@
 // ILS system login automation
 
 const logger = require('../utils/logger');
+const { retryWithBackoff, safeNavigate, safeType, safeClick, waitForPageLoad, elementExists, takeScreenshot } = require('../utils/helpers');
 
 class ILSLogin {
   constructor(page) {
@@ -139,56 +140,27 @@ class ILSLogin {
       // Wait a bit for popup to appear
       await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // Check if popup exists
-      const popupSelectors = [
-        'div:has-text("Update Password")',
-        'div[role="dialog"]',
-        '.modal',
-        'div.swal2-popup',
-        'div[class*="modal"]',
-        'div[class*="popup"]'
-      ];
-
-      // Try to find close button
-      const closeButtonSelectors = [
-        'button[class*="close"]',
-        'button[aria-label="close"]',
-        'button[aria-label="Close"]',
-        '.close',
-        '[data-dismiss="modal"]',
-        'button.swal2-close',
-        'svg[class*="close"]',
-        // Specific for this popup based on screenshot
-        'button:has-text("×")',
-        'button:has-text("Simpan")'
-      ];
-
-      // Try each close button selector
-      for (const selector of closeButtonSelectors) {
-        try {
-          const closeButton = await this.page.$(selector);
-          if (closeButton) {
-            logger.info(`Found close button: ${selector}`);
-            await closeButton.click();
-            logger.success('✅ "Update Password" popup closed');
-            
-            // Wait for popup to disappear
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            return true;
-          }
-        } catch (e) {
-          // Try next selector
-          continue;
-        }
-      }
-
-      // If no close button found, try ESC key
-      logger.info('Close button not found, trying ESC key...');
-      await this.page.keyboard.press('Escape');
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Specific selector based on actual HTML
+      const closeButtonSelector = 'button[data-bs-dismiss="modal"]';
       
-      logger.success('✅ Attempted to close popup with ESC');
-      return true;
+      try {
+        const closeButton = await this.page.$(closeButtonSelector);
+        if (closeButton) {
+          logger.info('Found "Update Password" popup, closing...');
+          await closeButton.click();
+          logger.success('✅ "Update Password" popup closed');
+          
+          // Wait for popup to disappear
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return true;
+        } else {
+          logger.info('No "Update Password" popup found');
+          return true;
+        }
+      } catch (e) {
+        logger.warn('Error checking popup:', e.message);
+        return true; // Continue anyway
+      }
     } catch (error) {
       logger.warn('No "Update Password" popup found or already closed');
       return true; // Continue anyway
