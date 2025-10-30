@@ -7,6 +7,7 @@
     "start": "node src/api/server.js",
     "dev": "nodemon src/api/server.js",
     "test": "node test-cli.js",
+    "test:parsing": "node test-parsing.js",
     "test:browser": "node -e \"require('./test-cli').testBrowser()\"",
     "test:login": "node -e \"require('./test-cli').testLogin()\""
   },
@@ -16,7 +17,7 @@
     "document-verification",
     "ils"
   ],
-  "author": "KBMTI",
+  "author": "Your Name",
   "license": "MIT",
   "dependencies": {
     "cors": "^2.8.5",
@@ -24,8 +25,10 @@
     "exceljs": "^4.4.0",
     "express": "^4.18.2",
     "pdf-parse": "^1.1.1",
-    "puppeteer": "^24.26.1",
+    "pdf-to-png-converter": "^3.10.0",
+    "puppeteer": "^24.27.0",
     "string-similarity": "^4.0.4",
+    "tesseract.js": "^6.0.1",
     "ws": "^8.14.2"
   },
   "devDependencies": {
