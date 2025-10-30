@@ -1,11 +1,25 @@
+# ===== BACKEND =====
 /backend/node_modules
 /backend/.env
 
+# ===== FRONTEND =====
 /frontend/node_modules
 /frontend/.env
 /frontend/build
 /frontend/dist
 
+# ===== LOGS / RESULTS / DOWNLOADS =====
+# Abaikan semua file di dalam folder
 /logs/*
 /results/*
 /downloads/*
+
+# Tapi tetap track folder-nya sendiri
+!/logs/.gitkeep
+!/results/.gitkeep
+!/downloads/.gitkeep
+
+# ===== ENV EXAMPLE =====
+# Tetap track contoh file environment
+!backend/.env.example
+!frontend/.env.example

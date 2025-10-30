@@ -25,7 +25,7 @@ async function testLoginOnly() {
   
   try {
     logger.info('='.repeat(60));
-    logger.info('ILS VERIFICATION BOT - LOGIN TEST (WITH POPUP CLOSE)');
+    logger.info('ILS VERIFICATION BOT - LOGIN TEST');
     logger.info('='.repeat(60));
 
     // Get credentials
@@ -165,7 +165,7 @@ async function main() {
   console.log('='.repeat(60));
   console.log('\nSelect test to run:');
   console.log('1. Browser Test (Launch Chromium)');
-  console.log('2. Login Test (ILS Login + Close Popup)');
+  console.log('2. Login Test (ILS Login)');
   console.log('3. Navigation Test (Login + Navigate to Scrap)');
   console.log('4. Exit');
   console.log('');
@@ -177,7 +177,7 @@ async function main() {
       await testBrowser();
       break;
     case '2':
-      await testLoginAndNavigation();
+      await testLoginOnly();
       break;
     case '3':
       await testLoginAndNavigation();
