@@ -120,11 +120,29 @@ class PDFParser {
 
         // Combine results in order
         ocrText += batchResults.join('\n\n');
+
+        // Delete PNG files for this batch immediately after processing
+        for (const page of batch) {
+          const imagePath = path.join(tempFolder, page.name);
+          try {
+            if (fs.existsSync(imagePath)) {
+              fs.unlinkSync(imagePath);
+              logger.debug(`Deleted temp PNG: ${page.name}`);
+            }
+          } catch (err) {
+            logger.warn(`Failed to delete PNG ${page.name}:`, err.message);
+          }
+        }
       }
 
-      // Clean up temp folder (use same absolute path as above)
+      // Clean up temp folder (should be empty now)
       if (fs.existsSync(tempFolder)) {
+        const remainingFiles = fs.readdirSync(tempFolder);
+        if (remainingFiles.length > 0) {
+          logger.warn(`Found ${remainingFiles.length} remaining files in ocr-temp, cleaning up...`);
+        }
         fs.rmSync(tempFolder, { recursive: true, force: true });
+        logger.debug('Cleaned up ocr-temp folder');
       }
 
       // Post-process OCR text to fix common errors
@@ -158,11 +176,20 @@ class PDFParser {
       // Preprocess image for better OCR accuracy
       const preprocessedImage = await this.preprocessImage(page.content);
 
+      // Configure Tesseract paths to keep language data organized
+      const langPath = path.resolve(__dirname, '../../tessdata');
+
+      // Ensure tessdata folder exists
+      if (!fs.existsSync(langPath)) {
+        fs.mkdirSync(langPath, { recursive: true });
+      }
+
       // Run OCR with Indonesian + English language support
       const result = await Tesseract.recognize(
         preprocessedImage,
         'ind+eng', // Indonesian + English for better accuracy
         {
+          langPath: langPath,  // Specify where to store/load language data
           logger: m => {
             if (m.status === 'recognizing text') {
               logger.debug(`Page ${pageNum} OCR progress: ${Math.round(m.progress * 100)}%`);
@@ -190,11 +217,8 @@ class PDFParser {
       const avgConfidence = result.data.confidence || 0;
       logger.success(`✅ Page ${pageNum} OCR complete (confidence: ${avgConfidence.toFixed(1)}%)`);
 
-      // Clean up temp image
-      const imagePath = path.join(__dirname, '../../logs/ocr-temp', page.name);
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
+      // Note: PNG cleanup is now handled after batch completes (in extractTextWithOCR)
+      // This prevents race conditions with parallel processing
 
       return filteredText;
     } catch (pageError) {

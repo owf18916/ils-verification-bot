@@ -3,3 +3,8 @@
 logs/ocr-result-*.txt
 logs/temp-*.pdf
 logs/ocr-temp/
+
+# Tesseract language data (auto-downloaded)
+tessdata/
+*.traineddata
+*.traineddata.gz

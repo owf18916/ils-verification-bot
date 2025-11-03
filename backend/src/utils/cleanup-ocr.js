@@ -159,6 +159,26 @@ class OCRCleanup {
         }
       }
 
+      // Clean up orphaned Tesseract language data files in root backend folder
+      // (These should be in backend/tessdata/ folder instead)
+      const backendRoot = path.dirname(this.logsDir);
+      const orphanedTessFiles = ['ind.traineddata', 'eng.traineddata', 'ind.traineddata.gz', 'eng.traineddata.gz'];
+
+      for (const filename of orphanedTessFiles) {
+        const orphanedPath = path.join(backendRoot, filename);
+        if (fs.existsSync(orphanedPath)) {
+          logger.warn(`Found orphaned Tesseract file: ${filename} (should be in tessdata folder)`);
+
+          if (this.dryRun) {
+            logger.info(`[DRY RUN] Would delete orphaned ${filename}`);
+          } else {
+            fs.unlinkSync(orphanedPath);
+            logger.info(`Deleted orphaned Tesseract file: ${filename}`);
+            totalDeleted++;
+          }
+        }
+      }
+
       return { deleted: totalDeleted };
     } catch (error) {
       logger.error('OCR temp folders cleanup failed:', error.message);
