@@ -275,10 +275,10 @@ class PDFParser {
    * Check if this is a BC 2.3 or BC 4.0 document
    */
   detectDocumentType() {
-    if (this.fullText.includes('BC 2.3') || this.fullText.includes('BC 23')) {
+    if (this.fullText.includes('BC 2.3') || this.fullText.includes('BC 23') || this.fullText.includes('BC23')) {
       logger.info('Document type: BC 2.3');
       return 'BC2.3';
-    } else if (this.fullText.includes('BC 4.0') || this.fullText.includes('BC 40')) {
+    } else if (this.fullText.includes('BC 4.0') || this.fullText.includes('BC 40') || this.fullText.includes('BC40')) {
       logger.info('Document type: BC 4.0');
       return 'BC4.0';
     }
@@ -290,16 +290,25 @@ class PDFParser {
    * Find table section in PDF
    */
   findTableSection() {
-    const keyword = 'LEMBAR LANJUTAN';
-    const keywordAlt = 'PEMBERITAHUAN IMPOR BARANG UNTUK DITIMBUN';
-    
-    if (this.fullText.includes(keyword)) {
-      logger.debug('Found table keyword: LEMBAR LANJUTAN');
-      return true;
+    const keywords = [
+      'LEMBAR LANJUTAN',
+      'PEMBERITAHUAN IMPOR BARANG UNTUK DITIMBUN',
+      'PEMBERITAHUAN IMPOR',
+      'Pos Tarif/HS',
+      'Pos TarifHS',
+      'Pos Tarif HS'
+    ];
+
+    let foundCount = 0;
+    for (const keyword of keywords) {
+      if (this.fullText.includes(keyword)) {
+        logger.debug(`Found keyword: ${keyword}`);
+        foundCount++;
+      }
     }
 
-    if (this.fullText.includes(keywordAlt)) {
-      logger.debug('Found table keyword: PEMBERITAHUAN IMPOR');
+    if (foundCount > 0) {
+      logger.debug(`Table section detected (${foundCount} keywords found)`);
       return true;
     }
 
@@ -308,7 +317,7 @@ class PDFParser {
   }
 
   /**
-   * Parse items from PDF by splitting on "Pos Tarif/HS"
+   * Parse items from PDF - handles both digital PDF and OCR formats
    */
   parseItems() {
     try {
@@ -318,31 +327,40 @@ class PDFParser {
         throw new Error('Table section not found');
       }
 
-      // Split by item pattern (number followed by "Pos Tarif/HS")
+      // Try multiple parsing strategies based on PDF format
+
+      // Strategy 1: Original format (number followed by "Pos Tarif/HS")
       const itemPattern = /(\d+)\s+Pos Tarif\/HS/g;
       const matches = [...this.fullText.matchAll(itemPattern)];
 
-      logger.debug(`Found ${matches.length} items in PDF`);
+      logger.debug(`Found ${matches.length} items using "Pos Tarif/HS" pattern`);
 
       this.items = [];
 
-      for (let i = 0; i < matches.length; i++) {
-        const match = matches[i];
-        const seri = parseInt(match[1]);
-        const startIndex = match.index;
-        const endIndex = i < matches.length - 1 ? matches[i + 1].index : this.fullText.length;
-        
-        const itemText = this.fullText.substring(startIndex, endIndex);
-        
-        try {
-          const itemData = this.parseItemText(seri, itemText);
-          if (itemData) {
-            this.items.push(itemData);
-            logger.debug(`Parsed Seri ${seri}: ${itemData.kodeBrg} - ${itemData.qty} ${itemData.satuan}`);
+      if (matches.length > 0) {
+        // Use original parsing for digital PDF
+        for (let i = 0; i < matches.length; i++) {
+          const match = matches[i];
+          const seri = parseInt(match[1]);
+          const startIndex = match.index;
+          const endIndex = i < matches.length - 1 ? matches[i + 1].index : this.fullText.length;
+
+          const itemText = this.fullText.substring(startIndex, endIndex);
+
+          try {
+            const itemData = this.parseItemText(seri, itemText);
+            if (itemData) {
+              this.items.push(itemData);
+              logger.debug(`Parsed Seri ${seri}: ${itemData.kodeBrg} - ${itemData.qty} ${itemData.satuan}`);
+            }
+          } catch (error) {
+            logger.warn(`Failed to parse item ${seri}:`, error.message);
           }
-        } catch (error) {
-          logger.warn(`Failed to parse item ${seri}:`, error.message);
         }
+      } else {
+        // Strategy 2: OCR format (item number followed by HS code in table)
+        logger.info('Trying OCR table format parsing...');
+        this.parseItemsFromOCRTable();
       }
 
       logger.success(`✅ Parsed ${this.items.length} items from PDF`);
@@ -354,7 +372,158 @@ class PDFParser {
   }
 
   /**
-   * Parse individual item text block
+   * Parse items from OCR table format
+   * Format: "1 8479.903000 ... 1.0000 Piece (PCE)"
+   */
+  parseItemsFromOCRTable() {
+    try {
+      // Pattern: line starting with item number, followed by HS code (4 digits . 6 digits)
+      // Example: "1 8479.903000 Tidak Japan (JP) BM: 5% DTG:100% 1.0000 Piece (PCE)"
+      const lines = this.fullText.split('\n');
+
+      const itemLinePattern = /^(\d+)\s+(\d{4}\.\d{6})/;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        const match = line.match(itemLinePattern);
+
+        if (match) {
+          const seri = parseInt(match[1]);
+          const hsCode = match[2];
+
+          // Get the full item block (current line + next few lines until next item)
+          let itemBlock = line + '\n';
+          let j = i + 1;
+          while (j < lines.length && !lines[j].trim().match(itemLinePattern)) {
+            itemBlock += lines[j] + '\n';
+            j++;
+            if (j - i > 10) break; // Limit to 10 lines per item
+          }
+
+          try {
+            const itemData = this.parseOCRItemText(seri, hsCode, itemBlock);
+            if (itemData) {
+              this.items.push(itemData);
+              logger.debug(`Parsed Seri ${seri}: ${itemData.kodeBrg} - ${itemData.qty} ${itemData.satuan}`);
+            }
+          } catch (error) {
+            logger.warn(`Failed to parse OCR item ${seri}:`, error.message);
+          }
+        }
+      }
+
+      logger.info(`OCR table parsing found ${this.items.length} items`);
+    } catch (error) {
+      logger.error('OCR table parsing failed:', error.message);
+    }
+  }
+
+  /**
+   * Parse OCR item text block
+   * Format example:
+   * "1 8479.903000 Tidak Japan (JP) BM: 5% DTG:100% 1.0000 Piece (PCE) 24.17
+   *  COMPACT FLASH (BUFFALO RC Berhub. Cukai:- 0.0200 Kg"
+   */
+  parseOCRItemText(seri, hsCode, itemBlock) {
+    try {
+      // Use HS code as Kode Brg (since table format doesn't have separate Kode Brg)
+      const kodeBrg = hsCode;
+
+      // Extract quantity and unit
+      // Pattern: "1.0000 Piece (PCE)" or "3.0000 Set (SET)"
+      const qtyPattern = /([\d.,]+)\s+(Piece|Set|Kg|Unit|Pcs|PCS|SET|PIECE|KG|UNIT)\s*\(([A-Z]+)\)/i;
+      const qtyMatch = itemBlock.match(qtyPattern);
+
+      if (!qtyMatch) {
+        throw new Error('Quantity not found in OCR text');
+      }
+
+      // Parse quantity
+      // Smart parsing: distinguish between thousand separator and decimal
+      // Format: "1.0000" (decimal) vs "3.150,0000" (thousand separator + decimal)
+      let qtyString = qtyMatch[1];
+
+      // If format is like "3.150,0000" (dot for thousand, comma for decimal)
+      if (qtyString.includes('.') && qtyString.includes(',')) {
+        qtyString = qtyString.replace(/\./g, '').replace(',', '.');
+      }
+      // If format is like "1.0000" with 4+ decimals (likely decimal point, not thousand separator)
+      else if (qtyString.match(/^\d+\.\d{4,}$/)) {
+        // Keep as is - it's a decimal point
+        qtyString = qtyString;
+      }
+      // If format is like "3.150" with 3 or fewer decimals (might be thousand separator)
+      else if (qtyString.match(/^\d{1,3}\.\d{3}$/)) {
+        // This could be "3.150" meaning 3150 (thousand separator)
+        qtyString = qtyString.replace(/\./g, '');
+      }
+      // Default: replace comma with dot for decimal
+      else {
+        qtyString = qtyString.replace(',', '.');
+      }
+
+      const qty = parseFloat(qtyString);
+      const satuan = qtyMatch[3].trim(); // Use the abbreviation in parentheses
+
+      if (isNaN(qty)) {
+        throw new Error(`Invalid qty: ${qtyMatch[1]}`);
+      }
+
+      // Extract description (Uraian)
+      // Description is typically on the second line
+      const lines = itemBlock.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      let uraian = '';
+
+      if (lines.length > 1) {
+        // Look for description line (usually contains uppercase text and product name)
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i];
+          // Description usually doesn't start with metadata keywords
+          if (line && !line.match(/^(Kd barang|Langsung|Carton|BM:|Cukai|PPN|PPnBM|PPh|Tidak|Berhub|\d+\s+Carton)/i)) {
+            // Extract full description (everything before "Berhub" or "Langsung")
+            const descMatch = line.match(/^(.+?)(?:\s+Berhub|\s+Langsung|$)/);
+            if (descMatch && descMatch[1].length > 3) {
+              uraian = descMatch[1].trim();
+              break;
+            }
+          }
+        }
+      }
+
+      // If no description found in second line, try to extract from first line after HS code
+      if (!uraian) {
+        // Look in the first line, between HS code and quantity
+        const firstLine = lines[0];
+        // Try to find text between country code and quantity or BM:
+        const patterns = [
+          /\([A-Z]{2}\)\s+(.+?)\s+(?:BM:|DTG:|\d+[.,]\d+\s+(?:Piece|Set|Kg))/i,
+          /Tidak\s+[A-Z][a-z]+\s+\([A-Z]{2}\)\s+(.+?)\s+(?:BM:|DTG:)/i
+        ];
+
+        for (const pattern of patterns) {
+          const match = firstLine.match(pattern);
+          if (match && match[1].length > 3) {
+            uraian = match[1].trim();
+            break;
+          }
+        }
+      }
+
+      return {
+        seri: seri,
+        kodeBrg: kodeBrg,
+        uraian: uraian,
+        qty: qty,
+        satuan: satuan
+      };
+    } catch (error) {
+      logger.error(`Error parsing OCR item text for seri ${seri}:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Parse individual item text block (for digital PDF)
    */
   parseItemText(seri, itemText) {
     try {

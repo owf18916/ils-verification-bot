@@ -1,0 +1,29 @@
+PEMBERITAHUAN IMPOR BARANG UNTUK DITIMBUN DI
+i 4 TEMPAT PENIMBUNAN BERIKAT BC23
+Kantor Pabean KPBC PASURUAN Halaman 2 dari 5
+Nomor Pengajuan 071300-000015-20151009-002077
+Nomor Pendaftaran 010997/09-10-2015
+30. 31. Pos Tarif/HS - 32.Kode 33.Negara 34. Tarif 35 Jumlah 36. Jumlah Nilai CIF
+No. - Uraian jenis dan jumlah barang secara lengkap, Penggunaan Asal BM, Cukai, PPN, Jenis Satuan,
+merk, type, ukuran, spesifikasi lain Barang PPnBM, PPh Berat Bersih (kg)
+Kode Barang
+1 8479.903000 Tidak Japan (JP) BM: 5% DTG:100% 1.0000 Piece (PCE) 24.17
+COMPACT FLASH (BUFFALO RC Berhub. Cukai:- 0.0200 Kg
+Langsung) PPN: 10% DTG:100%
+17 Carton (CT) PPnBM:-
+Kd barang: - PPh:2.5% DTG:100%
+2 8479.903000 Tidak Japan (JP) BM: 5% DTG:100% 1.0000 Set (SET) 580.20
+BARCORD HANDY SCANNER ASS Berhub. Cukai:- 05970 Kg
+Langsung) PPN: 10% DTG:100%
+0 Carton (CT) PPRBM:-
+Kd barang: - PPh:2.5% DTG:100%
+3 8479.903000 Tidak Japan (JP) BM: 5% DTG:100% 3.0000 Piece (PCE) 72.52
+COMPACT FLASH (BUFFALO RC Berhub. Cukai:- 0.0600 Kg
+Langsung) PPN: 10% DTG:100%
+0 Carton (CT) PPnBM:-0%
+Kd barang: PPh:2.5% DTG:100%
+4 8479.903000 Tidak Japan (JP) BM: 5% DTG:100% 2.0000 Piece (PCE) 21627
+CENTER NOZZLE Berhub. Cukai- 0.0350 Kg
+Langsung) PPN: 10% DTG:100%
+0 Carton (CT) PPnBM:-0%
+Kd barang: PPh:2.5% DTG:100%
