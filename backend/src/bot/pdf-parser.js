@@ -92,12 +92,18 @@ class PDFParser {
       logger.info('Starting enhanced OCR text extraction...');
       logger.info('This may take 30-90 seconds depending on PDF size...');
 
+      // Ensure temp folder exists and use absolute path to prevent directory creation issues
+      const tempFolder = path.resolve(__dirname, '../../logs/ocr-temp');
+      if (!fs.existsSync(tempFolder)) {
+        fs.mkdirSync(tempFolder, { recursive: true });
+      }
+
       // Convert PDF to images with higher resolution
       const pngPages = await pdfToPng(this.pdfPath, {
         disableFontFace: false,
         useSystemFonts: false,
         viewportScale: 3.0, // Increased from 2.0 for better quality
-        outputFolder: path.join(__dirname, '../../logs/ocr-temp')
+        outputFolder: tempFolder  // Use absolute path
       });
 
       logger.info(`Converted PDF to ${pngPages.length} images`);
@@ -116,8 +122,7 @@ class PDFParser {
         ocrText += batchResults.join('\n\n');
       }
 
-      // Clean up temp folder
-      const tempFolder = path.join(__dirname, '../../logs/ocr-temp');
+      // Clean up temp folder (use same absolute path as above)
       if (fs.existsSync(tempFolder)) {
         fs.rmSync(tempFolder, { recursive: true, force: true });
       }

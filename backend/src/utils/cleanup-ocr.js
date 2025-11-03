@@ -117,8 +117,10 @@ class OCRCleanup {
     try {
       logger.info('Starting OCR temp folders cleanup...');
 
-      const ocrTempPath = path.join(this.logsDir, 'ocr-temp');
+      let totalDeleted = 0;
 
+      // Clean up ocr-temp folder
+      const ocrTempPath = path.join(this.logsDir, 'ocr-temp');
       if (fs.existsSync(ocrTempPath)) {
         const files = fs.readdirSync(ocrTempPath);
 
@@ -130,7 +132,7 @@ class OCRCleanup {
           } else {
             fs.rmSync(ocrTempPath, { recursive: true, force: true });
             logger.info(`Deleted ocr-temp folder with ${files.length} orphaned files`);
-            return { deleted: files.length };
+            totalDeleted += files.length;
           }
         } else {
           // Empty folder, remove it
@@ -143,7 +145,21 @@ class OCRCleanup {
         logger.debug('No ocr-temp folder found (clean)');
       }
 
-      return { deleted: 0 };
+      // Clean up incorrectly created 'home' folder (path resolution bug)
+      const incorrectHomePath = path.join(path.dirname(this.logsDir), 'home');
+      if (fs.existsSync(incorrectHomePath)) {
+        logger.warn(`Found incorrectly created 'home' folder at: ${incorrectHomePath}`);
+
+        if (this.dryRun) {
+          logger.info(`[DRY RUN] Would delete incorrect 'home' folder`);
+        } else {
+          fs.rmSync(incorrectHomePath, { recursive: true, force: true });
+          logger.info(`Deleted incorrectly created 'home' folder`);
+          totalDeleted++;
+        }
+      }
+
+      return { deleted: totalDeleted };
     } catch (error) {
       logger.error('OCR temp folders cleanup failed:', error.message);
       throw error;
