@@ -6,6 +6,7 @@ const Tesseract = require('tesseract.js');
 const { pdfToPng } = require('pdf-to-png-converter');
 const sharp = require('sharp');
 const logger = require('../utils/logger');
+const OCRCleanup = require('../utils/cleanup-ocr');
 const fs = require('fs');
 const path = require('path');
 
@@ -66,7 +67,7 @@ class PDFParser {
         this.isScanned = true;
         
         // Save buffer to temp file for OCR
-        const tempPath = path.join(__dirname, '../../../logs', `temp-${Date.now()}.pdf`);
+        const tempPath = path.join(__dirname, '../../logs', `temp-${Date.now()}.pdf`);
         fs.writeFileSync(tempPath, buffer);
         this.pdfPath = tempPath;
         
@@ -96,7 +97,7 @@ class PDFParser {
         disableFontFace: false,
         useSystemFonts: false,
         viewportScale: 3.0, // Increased from 2.0 for better quality
-        outputFolder: path.join(__dirname, '../../../logs/ocr-temp')
+        outputFolder: path.join(__dirname, '../../logs/ocr-temp')
       });
 
       logger.info(`Converted PDF to ${pngPages.length} images`);
@@ -116,7 +117,7 @@ class PDFParser {
       }
 
       // Clean up temp folder
-      const tempFolder = path.join(__dirname, '../../../logs/ocr-temp');
+      const tempFolder = path.join(__dirname, '../../logs/ocr-temp');
       if (fs.existsSync(tempFolder)) {
         fs.rmSync(tempFolder, { recursive: true, force: true });
       }
@@ -128,9 +129,12 @@ class PDFParser {
       logger.success(`✅ Enhanced OCR extraction complete (${ocrText.length} characters)`);
 
       // Save OCR result for debugging
-      const ocrLogPath = path.join(__dirname, '../../../logs', `ocr-result-${Date.now()}.txt`);
+      const ocrLogPath = path.join(__dirname, '../../logs', `ocr-result-${Date.now()}.txt`);
       fs.writeFileSync(ocrLogPath, ocrText);
       logger.info(`OCR result saved to: ${ocrLogPath}`);
+
+      // Auto-cleanup old OCR files (run in background, don't wait)
+      this.runCleanupAsync();
 
       return ocrText;
     } catch (error) {
@@ -182,7 +186,7 @@ class PDFParser {
       logger.success(`✅ Page ${pageNum} OCR complete (confidence: ${avgConfidence.toFixed(1)}%)`);
 
       // Clean up temp image
-      const imagePath = path.join(__dirname, '../../../logs/ocr-temp', page.name);
+      const imagePath = path.join(__dirname, '../../logs/ocr-temp', page.name);
       if (fs.existsSync(imagePath)) {
         fs.unlinkSync(imagePath);
       }
@@ -698,6 +702,34 @@ class PDFParser {
         max: Math.max(...this.items.map(i => i.seri))
       }
     };
+  }
+
+  /**
+   * Run cleanup asynchronously (don't wait for completion)
+   */
+  runCleanupAsync() {
+    // Run cleanup in background without blocking
+    setImmediate(async () => {
+      try {
+        logger.debug('Running auto-cleanup for OCR files...');
+        const cleanup = new OCRCleanup({
+          maxAge: 7,      // Keep files for 7 days
+          maxFiles: 50,   // Keep max 50 recent files
+          dryRun: false
+        });
+
+        const results = await cleanup.cleanupOCRResults();
+
+        if (results.deleted > 0) {
+          logger.info(`Auto-cleanup: Deleted ${results.deleted} old OCR files, kept ${results.kept}`);
+        } else {
+          logger.debug('Auto-cleanup: No old OCR files to delete');
+        }
+      } catch (error) {
+        // Don't throw error - cleanup failure should not break parsing
+        logger.warn('Auto-cleanup failed (non-critical):', error.message);
+      }
+    });
   }
 }
 
