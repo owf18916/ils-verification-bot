@@ -225,37 +225,36 @@ class PDFParser {
     try {
       let cleaned = text;
 
-      // Fix common OCR errors for Indonesian customs documents
-      const replacements = {
-        // Common number/letter confusions
-        'O': '0', // When in numeric context
-        'l': '1', // When in numeric context (lowercase L)
-        'I': '1', // When in numeric context
-        'S': '5', // When in numeric context
-        'B': '8', // When in numeric context
-
+      // Fix common word/phrase errors FIRST (before character replacements)
+      const phraseReplacements = {
         // Common word fixes for Indonesian
-        'Kode Brg': 'Kode Brg',
         'Kode 8rg': 'Kode Brg',
         'Kode 8RG': 'Kode Brg',
-        'Pos Tarif': 'Pos Tarif',
         'Pos TarifI': 'Pos Tarif',
         'Pos TarifHS': 'Pos Tarif/HS',
-        'Jumlah': 'Jumlah',
+        'Pos Taril': 'Pos Tarif',
         'Jurnlah': 'Jumlah',
-        'Satuan': 'Satuan',
-        'Uraian': 'Uraian',
-        'Kemasan': 'Kemasan',
-
-        // Fix spacing issues
-        '  ': ' ', // Multiple spaces to single
+        'PEMER1TAHUAN': 'PEMBERITAHUAN',
+        'PEM8ERITAHUAN': 'PEMBERITAHUAN',
+        '1MPOR': 'IMPOR',
+        'IMP0R': 'IMPOR',
+        '8ARANG': 'BARANG',
+        'LEMRAR': 'LEMBAR',
+        'LANJIJTAN': 'LANJUTAN',
       };
 
-      // Apply replacements
-      for (const [wrong, correct] of Object.entries(replacements)) {
-        const regex = new RegExp(wrong, 'g');
+      // Apply phrase replacements first
+      for (const [wrong, correct] of Object.entries(phraseReplacements)) {
+        const regex = new RegExp(wrong, 'gi');
         cleaned = cleaned.replace(regex, correct);
       }
+
+      // REMOVED: Global character replacements that were breaking keywords
+      // They were converting "PEMBERITAHUAN IMPOR" to "PEM8ER1TAHUAN 1MP0R"
+      // Character-level fixes should only be done in numeric context during parsing
+
+      // Fix spacing issues
+      cleaned = cleaned.replace(/\s{2,}/g, ' '); // Multiple spaces to single
 
       // Remove excessive newlines (more than 3 consecutive)
       cleaned = cleaned.replace(/\n{4,}/g, '\n\n\n');
@@ -275,19 +274,36 @@ class PDFParser {
    * Check if this is a BC 2.3 or BC 4.0 document
    */
   detectDocumentType() {
-    if (this.fullText.includes('BC 2.3') || this.fullText.includes('BC 23') || this.fullText.includes('BC23')) {
-      logger.info('Document type: BC 2.3');
-      return 'BC2.3';
-    } else if (this.fullText.includes('BC 4.0') || this.fullText.includes('BC 40') || this.fullText.includes('BC40')) {
-      logger.info('Document type: BC 4.0');
-      return 'BC4.0';
+    // Check for BC 2.3 variations
+    const bc23Patterns = ['BC 2.3', 'BC 23', 'BC23', 'BC2.3'];
+    for (const pattern of bc23Patterns) {
+      if (this.fullText.includes(pattern)) {
+        logger.info(`Document type: BC 2.3 (matched: ${pattern})`);
+        return 'BC2.3';
+      }
     }
-    logger.warn('Unknown document type');
+
+    // Check for BC 4.0 variations
+    const bc40Patterns = ['BC 4.0', 'BC 40', 'BC40', 'BC4.0'];
+    for (const pattern of bc40Patterns) {
+      if (this.fullText.includes(pattern)) {
+        logger.info(`Document type: BC 4.0 (matched: ${pattern})`);
+        return 'BC4.0';
+      }
+    }
+
+    // Show sample for debugging
+    logger.warn('Unknown document type. Checking text sample...');
+    const bcMatches = this.fullText.match(/BC[\s\.]?[\d.]+/g);
+    if (bcMatches && bcMatches.length > 0) {
+      logger.warn(`Found BC patterns: ${bcMatches.slice(0, 3).join(', ')}`);
+    }
+
     return 'Unknown';
   }
 
   /**
-   * Find table section in PDF
+   * Find table section in PDF - with debug logging
    */
   findTableSection() {
     const keywords = [
@@ -296,19 +312,40 @@ class PDFParser {
       'PEMBERITAHUAN IMPOR',
       'Pos Tarif/HS',
       'Pos TarifHS',
-      'Pos Tarif HS'
+      'Pos Tarif HS',
+      'Pos Taril/HS',  // OCR typo variation
+      'BC23',
+      'BC 23',
+      'BC 2.3',
+      'TEMPAT PENIMBUNAN BERIKAT'
     ];
 
     let foundCount = 0;
+    const foundKeywords = [];
+
     for (const keyword of keywords) {
       if (this.fullText.includes(keyword)) {
         logger.debug(`Found keyword: ${keyword}`);
+        foundKeywords.push(keyword);
         foundCount++;
       }
     }
 
     if (foundCount > 0) {
-      logger.debug(`Table section detected (${foundCount} keywords found)`);
+      logger.debug(`Table section detected (${foundCount} keywords found: ${foundKeywords.join(', ')})`);
+      return true;
+    }
+
+    // If no keywords found, show sample of text for debugging
+    logger.warn('No table keywords found. Showing text sample...');
+    const sample = this.fullText.substring(0, 500).replace(/\n/g, ' ');
+    logger.warn(`Text sample: ${sample}`);
+
+    // Try fuzzy matching - check if ANY item-like pattern exists
+    // Pattern: number followed by digits (could be HS code)
+    const itemPattern = /[\|\s]*\d+\s+[\[\(]?\d{4}[.,]?\d{2,3}[.,]?\d{3,4}/;
+    if (itemPattern.test(this.fullText)) {
+      logger.warn('Found item-like pattern, proceeding with parsing...');
       return true;
     }
 
