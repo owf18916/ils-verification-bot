@@ -7,8 +7,8 @@ async function testOCRParsing() {
   try {
     console.log('\n=== Testing OCR Table Parsing ===\n');
 
-    // Read sample OCR text
-    const sampleText = fs.readFileSync('./logs/sample-ocr.txt', 'utf8');
+    // Read real OCR text
+    const sampleText = fs.readFileSync('./logs/real-ocr-sample.txt', 'utf8');
 
     // Create parser instance
     const parser = new PDFParser('dummy.pdf');
