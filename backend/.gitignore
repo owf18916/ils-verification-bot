@@ -1,0 +1,5 @@
+
+# OCR temporary files
+logs/ocr-result-*.txt
+logs/temp-*.pdf
+logs/ocr-temp/
