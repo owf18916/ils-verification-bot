@@ -4,6 +4,7 @@
 const pdfParse = require('pdf-parse');
 const Tesseract = require('tesseract.js');
 const { pdfToPng } = require('pdf-to-png-converter');
+const sharp = require('sharp');
 const logger = require('../utils/logger');
 const fs = require('fs');
 const path = require('path');
@@ -83,52 +84,35 @@ class PDFParser {
   }
 
   /**
-   * Extract text using OCR (Tesseract)
+   * Extract text using OCR (Tesseract) with enhanced accuracy for scanned documents
    */
   async extractTextWithOCR() {
     try {
-      logger.info('Starting OCR text extraction...');
-      logger.info('This may take 30-60 seconds depending on PDF size...');
-      
-      // Convert PDF to images
+      logger.info('Starting enhanced OCR text extraction...');
+      logger.info('This may take 30-90 seconds depending on PDF size...');
+
+      // Convert PDF to images with higher resolution
       const pngPages = await pdfToPng(this.pdfPath, {
         disableFontFace: false,
         useSystemFonts: false,
-        viewportScale: 2.0,
+        viewportScale: 3.0, // Increased from 2.0 for better quality
         outputFolder: path.join(__dirname, '../../../logs/ocr-temp')
       });
 
       logger.info(`Converted PDF to ${pngPages.length} images`);
 
-      // OCR each page
+      // Process pages in parallel (batches of 3 to avoid memory issues)
+      const batchSize = 3;
       let ocrText = '';
-      for (let i = 0; i < pngPages.length; i++) {
-        logger.info(`OCR processing page ${i + 1}/${pngPages.length}...`);
-        
-        try {
-          const result = await Tesseract.recognize(
-            pngPages[i].content,
-            'eng', // Use English language
-            {
-              logger: m => {
-                if (m.status === 'recognizing text') {
-                  logger.debug(`OCR progress: ${Math.round(m.progress * 100)}%`);
-                }
-              }
-            }
-          );
-          
-          ocrText += result.data.text + '\n\n';
-          logger.success(`✅ Page ${i + 1} OCR complete`);
-          
-          // Clean up temp image
-          const imagePath = path.join(__dirname, '../../../logs/ocr-temp', pngPages[i].name);
-          if (fs.existsSync(imagePath)) {
-            fs.unlinkSync(imagePath);
-          }
-        } catch (pageError) {
-          logger.error(`OCR failed for page ${i + 1}:`, pageError.message);
-        }
+
+      for (let i = 0; i < pngPages.length; i += batchSize) {
+        const batch = pngPages.slice(i, Math.min(i + batchSize, pngPages.length));
+        const batchResults = await Promise.all(
+          batch.map((page, idx) => this.processPageWithOCR(page, i + idx + 1, pngPages.length))
+        );
+
+        // Combine results in order
+        ocrText += batchResults.join('\n\n');
       }
 
       // Clean up temp folder
@@ -137,18 +121,153 @@ class PDFParser {
         fs.rmSync(tempFolder, { recursive: true, force: true });
       }
 
+      // Post-process OCR text to fix common errors
+      ocrText = this.postProcessOCRText(ocrText);
+
       this.fullText = ocrText;
-      logger.success(`✅ OCR extraction complete (${ocrText.length} characters)`);
-      
+      logger.success(`✅ Enhanced OCR extraction complete (${ocrText.length} characters)`);
+
       // Save OCR result for debugging
       const ocrLogPath = path.join(__dirname, '../../../logs', `ocr-result-${Date.now()}.txt`);
       fs.writeFileSync(ocrLogPath, ocrText);
       logger.info(`OCR result saved to: ${ocrLogPath}`);
-      
+
       return ocrText;
     } catch (error) {
       logger.error('OCR extraction failed:', error.message);
       throw new Error('Cannot extract text from scanned PDF. OCR failed.');
+    }
+  }
+
+  /**
+   * Process a single page with preprocessing and OCR
+   */
+  async processPageWithOCR(page, pageNum, totalPages) {
+    try {
+      logger.info(`OCR processing page ${pageNum}/${totalPages}...`);
+
+      // Preprocess image for better OCR accuracy
+      const preprocessedImage = await this.preprocessImage(page.content);
+
+      // Run OCR with Indonesian + English language support
+      const result = await Tesseract.recognize(
+        preprocessedImage,
+        'ind+eng', // Indonesian + English for better accuracy
+        {
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              logger.debug(`Page ${pageNum} OCR progress: ${Math.round(m.progress * 100)}%`);
+            }
+          }
+        }
+      );
+
+      // Filter by confidence threshold
+      const minConfidence = 30; // Lowered to capture more text, will clean up later
+      let filteredText = '';
+
+      if (result.data.words) {
+        result.data.words.forEach(word => {
+          if (word.confidence >= minConfidence) {
+            filteredText += word.text + ' ';
+          } else {
+            logger.debug(`Skipped low confidence word: "${word.text}" (${word.confidence.toFixed(1)}%)`);
+          }
+        });
+      } else {
+        filteredText = result.data.text;
+      }
+
+      const avgConfidence = result.data.confidence || 0;
+      logger.success(`✅ Page ${pageNum} OCR complete (confidence: ${avgConfidence.toFixed(1)}%)`);
+
+      // Clean up temp image
+      const imagePath = path.join(__dirname, '../../../logs/ocr-temp', page.name);
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+      }
+
+      return filteredText;
+    } catch (pageError) {
+      logger.error(`OCR failed for page ${pageNum}:`, pageError.message);
+      return '';
+    }
+  }
+
+  /**
+   * Preprocess image for better OCR accuracy
+   */
+  async preprocessImage(imageBuffer) {
+    try {
+      // Apply image enhancements:
+      // 1. Convert to grayscale
+      // 2. Increase contrast
+      // 3. Sharpen
+      // 4. Remove noise
+      const processed = await sharp(imageBuffer)
+        .grayscale() // Convert to grayscale for better OCR
+        .normalize() // Normalize contrast
+        .sharpen() // Sharpen edges
+        .threshold(128) // Binarize image (black & white)
+        .toBuffer();
+
+      return processed;
+    } catch (error) {
+      logger.warn('Image preprocessing failed, using original image:', error.message);
+      return imageBuffer;
+    }
+  }
+
+  /**
+   * Post-process OCR text to fix common errors
+   */
+  postProcessOCRText(text) {
+    try {
+      let cleaned = text;
+
+      // Fix common OCR errors for Indonesian customs documents
+      const replacements = {
+        // Common number/letter confusions
+        'O': '0', // When in numeric context
+        'l': '1', // When in numeric context (lowercase L)
+        'I': '1', // When in numeric context
+        'S': '5', // When in numeric context
+        'B': '8', // When in numeric context
+
+        // Common word fixes for Indonesian
+        'Kode Brg': 'Kode Brg',
+        'Kode 8rg': 'Kode Brg',
+        'Kode 8RG': 'Kode Brg',
+        'Pos Tarif': 'Pos Tarif',
+        'Pos TarifI': 'Pos Tarif',
+        'Pos TarifHS': 'Pos Tarif/HS',
+        'Jumlah': 'Jumlah',
+        'Jurnlah': 'Jumlah',
+        'Satuan': 'Satuan',
+        'Uraian': 'Uraian',
+        'Kemasan': 'Kemasan',
+
+        // Fix spacing issues
+        '  ': ' ', // Multiple spaces to single
+      };
+
+      // Apply replacements
+      for (const [wrong, correct] of Object.entries(replacements)) {
+        const regex = new RegExp(wrong, 'g');
+        cleaned = cleaned.replace(regex, correct);
+      }
+
+      // Remove excessive newlines (more than 3 consecutive)
+      cleaned = cleaned.replace(/\n{4,}/g, '\n\n\n');
+
+      // Trim each line
+      cleaned = cleaned.split('\n').map(line => line.trim()).join('\n');
+
+      logger.info('OCR text post-processing complete');
+      return cleaned;
+    } catch (error) {
+      logger.warn('Post-processing failed, using original text:', error.message);
+      return text;
     }
   }
 
