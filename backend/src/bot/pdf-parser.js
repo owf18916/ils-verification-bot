@@ -93,7 +93,8 @@ class PDFParser {
       logger.info('This may take 30-90 seconds depending on PDF size...');
 
       // Ensure temp folder exists and use absolute path to prevent directory creation issues
-      const tempFolder = path.resolve(__dirname, '../../logs/ocr-temp');
+      // Use project root /logs/ocr-temp/ instead of /backend/logs/ocr-temp/
+      const tempFolder = path.resolve(__dirname, '../../../logs/ocr-temp');
       if (!fs.existsSync(tempFolder)) {
         fs.mkdirSync(tempFolder, { recursive: true });
       }
