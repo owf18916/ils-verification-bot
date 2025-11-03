@@ -1,4 +1,9 @@
 
+# OCR temporary files (safety net - primary location is project root /logs/)
+logs/ocr-result-*.txt
+logs/temp-*.pdf
+logs/ocr-temp/
+
 # Tesseract language data (auto-downloaded)
 tessdata/
 *.traineddata
