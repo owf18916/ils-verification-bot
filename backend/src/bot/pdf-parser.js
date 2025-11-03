@@ -374,14 +374,22 @@ class PDFParser {
   /**
    * Parse items from OCR table format
    * Format: "1 8479.903000 ... 1.0000 Piece (PCE)"
+   * Also handles: "| 1 [8479.903000" and variations
    */
   parseItemsFromOCRTable() {
     try {
-      // Pattern: line starting with item number, followed by HS code (4 digits . 6 digits)
-      // Example: "1 8479.903000 Tidak Japan (JP) BM: 5% DTG:100% 1.0000 Piece (PCE)"
+      // Pattern variations in real OCR:
+      // "1 8479.903000" - normal (10 chars with dot)
+      // "| 1 [8479.903000" - with pipe and bracket
+      // "2 8479903000" - no dots (10 digits)
+      // "5 [8479.90.3000" - extra dot
+      // "7 [3926905900" - 10 digits no dots
       const lines = this.fullText.split('\n');
 
-      const itemLinePattern = /^(\d+)\s+(\d{4}\.\d{6})/;
+      // Pattern: multiple optional pipes/spaces, item number, optional bracket, HS code
+      // Matches: 1234.567890 or 1234567890 or 1234.56.7890 or 1234567890 (10 digits)
+      // Handles: "| | 7 [3926905900" (double pipe)
+      const itemLinePattern = /^[\|\s]*(\d+)\s+\[?(\d{4}[.,]?\d{2,3}[.,]?\d{3,4}|\d{10})/;
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -423,11 +431,23 @@ class PDFParser {
    * Format example:
    * "1 8479.903000 Tidak Japan (JP) BM: 5% DTG:100% 1.0000 Piece (PCE) 24.17
    *  COMPACT FLASH (BUFFALO RC Berhub. Cukai:- 0.0200 Kg"
+   * Also handles: "| 1 [8479903000" and other variations
    */
   parseOCRItemText(seri, hsCode, itemBlock) {
     try {
-      // Use HS code as Kode Brg (since table format doesn't have separate Kode Brg)
-      const kodeBrg = hsCode;
+      // Normalize HS code: remove brackets, ensure proper format
+      // "8479903000" → "8479.903000"
+      // "8479.90.3000" → "8479.903000"
+      let kodeBrg = hsCode.replace(/[\[\]]/g, ''); // Remove brackets
+
+      // If no dots, add them in proper positions (4.6 format)
+      if (!kodeBrg.includes('.') && kodeBrg.length >= 10) {
+        kodeBrg = kodeBrg.substring(0, 4) + '.' + kodeBrg.substring(4);
+      }
+      // If has dots but wrong format (e.g., "8479.90.3000"), normalize it
+      else if (kodeBrg.match(/^\d{4}\.\d{2}\.\d{4}$/)) {
+        kodeBrg = kodeBrg.replace(/^(\d{4})\.(\d{2})\.(\d{4})$/, '$1.$2$3');
+      }
 
       // Extract quantity and unit
       // Pattern: "1.0000 Piece (PCE)" or "3.0000 Set (SET)"
@@ -508,6 +528,9 @@ class PDFParser {
           }
         }
       }
+
+      // Clean up description: remove leading pipe, brackets, etc
+      uraian = uraian.replace(/^\|+\s*/, '').trim();
 
       return {
         seri: seri,
