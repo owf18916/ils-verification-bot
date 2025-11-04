@@ -92,18 +92,24 @@ class PDFParser {
       logger.info('Starting enhanced OCR text extraction...');
       logger.info('This may take 30-90 seconds depending on PDF size...');
 
-      // Ensure temp folder exists and use absolute path to prevent directory creation issues
-      const tempFolder = path.resolve(__dirname, '../../logs/ocr-temp');
-      if (!fs.existsSync(tempFolder)) {
-        fs.mkdirSync(tempFolder, { recursive: true });
+      // Ensure temp folder exists
+      // Use simple relative path from backend working directory to project root /logs/
+      // When backend runs from /backend dir, '../logs/ocr-temp' goes to project root /logs/ocr-temp
+      const tempFolder = path.join('..', 'logs', 'ocr-temp');
+      const absoluteTempFolder = path.resolve(tempFolder);
+
+      if (!fs.existsSync(absoluteTempFolder)) {
+        fs.mkdirSync(absoluteTempFolder, { recursive: true });
       }
+
+      logger.debug(`OCR temp folder: ${absoluteTempFolder}`);
 
       // Convert PDF to images with higher resolution
       const pngPages = await pdfToPng(this.pdfPath, {
         disableFontFace: false,
         useSystemFonts: false,
         viewportScale: 3.0, // Increased from 2.0 for better quality
-        outputFolder: tempFolder  // Use absolute path
+        outputFolder: tempFolder  // Use relative path (works better with pdf-to-png-converter)
       });
 
       logger.info(`Converted PDF to ${pngPages.length} images`);
@@ -120,11 +126,29 @@ class PDFParser {
 
         // Combine results in order
         ocrText += batchResults.join('\n\n');
+
+        // Delete PNG files for this batch immediately after processing
+        for (const page of batch) {
+          const imagePath = path.join(absoluteTempFolder, page.name);
+          try {
+            if (fs.existsSync(imagePath)) {
+              fs.unlinkSync(imagePath);
+              logger.debug(`Deleted temp PNG: ${page.name}`);
+            }
+          } catch (err) {
+            logger.warn(`Failed to delete PNG ${page.name}:`, err.message);
+          }
+        }
       }
 
-      // Clean up temp folder (use same absolute path as above)
-      if (fs.existsSync(tempFolder)) {
-        fs.rmSync(tempFolder, { recursive: true, force: true });
+      // Clean up temp folder (should be empty now)
+      if (fs.existsSync(absoluteTempFolder)) {
+        const remainingFiles = fs.readdirSync(absoluteTempFolder);
+        if (remainingFiles.length > 0) {
+          logger.warn(`Found ${remainingFiles.length} remaining files in ocr-temp, cleaning up...`);
+        }
+        fs.rmSync(absoluteTempFolder, { recursive: true, force: true });
+        logger.debug('Cleaned up ocr-temp folder');
       }
 
       // Post-process OCR text to fix common errors
@@ -158,11 +182,20 @@ class PDFParser {
       // Preprocess image for better OCR accuracy
       const preprocessedImage = await this.preprocessImage(page.content);
 
+      // Configure Tesseract paths to keep language data organized
+      const langPath = path.resolve(__dirname, '../../tessdata');
+
+      // Ensure tessdata folder exists
+      if (!fs.existsSync(langPath)) {
+        fs.mkdirSync(langPath, { recursive: true });
+      }
+
       // Run OCR with Indonesian + English language support
       const result = await Tesseract.recognize(
         preprocessedImage,
         'ind+eng', // Indonesian + English for better accuracy
         {
+          langPath: langPath,  // Specify where to store/load language data
           logger: m => {
             if (m.status === 'recognizing text') {
               logger.debug(`Page ${pageNum} OCR progress: ${Math.round(m.progress * 100)}%`);
@@ -190,11 +223,8 @@ class PDFParser {
       const avgConfidence = result.data.confidence || 0;
       logger.success(`✅ Page ${pageNum} OCR complete (confidence: ${avgConfidence.toFixed(1)}%)`);
 
-      // Clean up temp image
-      const imagePath = path.join(__dirname, '../../logs/ocr-temp', page.name);
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
+      // Note: PNG cleanup is now handled after batch completes (in extractTextWithOCR)
+      // This prevents race conditions with parallel processing
 
       return filteredText;
     } catch (pageError) {

@@ -7,9 +7,9 @@ const logger = require('./logger');
 
 class OCRCleanup {
   constructor(options = {}) {
-    // Default to backend/logs directory
-    // __dirname is backend/src/utils, so go up 2 levels to backend, then /logs
-    this.logsDir = options.logsDir || path.join(__dirname, '../../logs');
+    // Default to project root /logs directory (not /backend/logs)
+    // __dirname is backend/src/utils, so go up 3 levels to project root, then /logs
+    this.logsDir = options.logsDir || path.join(__dirname, '../../../logs');
     this.maxAge = options.maxAge || 7; // Days to keep files
     this.maxFiles = options.maxFiles || 50; // Max number of recent files to keep
     this.dryRun = options.dryRun || false; // If true, only log what would be deleted
@@ -146,7 +146,9 @@ class OCRCleanup {
       }
 
       // Clean up incorrectly created 'home' folder (path resolution bug)
-      const incorrectHomePath = path.join(path.dirname(this.logsDir), 'home');
+      // This was created in /backend/home/ due to old path resolution issue
+      const backendDir = path.resolve(__dirname, '../..');  // backend directory
+      const incorrectHomePath = path.join(backendDir, 'home');
       if (fs.existsSync(incorrectHomePath)) {
         logger.warn(`Found incorrectly created 'home' folder at: ${incorrectHomePath}`);
 
@@ -156,6 +158,27 @@ class OCRCleanup {
           fs.rmSync(incorrectHomePath, { recursive: true, force: true });
           logger.info(`Deleted incorrectly created 'home' folder`);
           totalDeleted++;
+        }
+      }
+
+      // Clean up orphaned Tesseract language data files in root backend folder
+      // (These should be in backend/tessdata/ folder instead)
+      // Use explicit backend directory path since logsDir now points to project root
+      const backendRoot = path.resolve(__dirname, '../..');  // backend directory
+      const orphanedTessFiles = ['ind.traineddata', 'eng.traineddata', 'ind.traineddata.gz', 'eng.traineddata.gz'];
+
+      for (const filename of orphanedTessFiles) {
+        const orphanedPath = path.join(backendRoot, filename);
+        if (fs.existsSync(orphanedPath)) {
+          logger.warn(`Found orphaned Tesseract file: ${filename} (should be in tessdata folder)`);
+
+          if (this.dryRun) {
+            logger.info(`[DRY RUN] Would delete orphaned ${filename}`);
+          } else {
+            fs.unlinkSync(orphanedPath);
+            logger.info(`Deleted orphaned Tesseract file: ${filename}`);
+            totalDeleted++;
+          }
         }
       }
 
