@@ -92,19 +92,24 @@ class PDFParser {
       logger.info('Starting enhanced OCR text extraction...');
       logger.info('This may take 30-90 seconds depending on PDF size...');
 
-      // Ensure temp folder exists and use absolute path to prevent directory creation issues
-      // Use project root /logs/ocr-temp/ instead of /backend/logs/ocr-temp/
-      const tempFolder = path.resolve(__dirname, '../../../logs/ocr-temp');
-      if (!fs.existsSync(tempFolder)) {
-        fs.mkdirSync(tempFolder, { recursive: true });
+      // Ensure temp folder exists
+      // Use simple relative path from backend working directory to project root /logs/
+      // When backend runs from /backend dir, '../logs/ocr-temp' goes to project root /logs/ocr-temp
+      const tempFolder = path.join('..', 'logs', 'ocr-temp');
+      const absoluteTempFolder = path.resolve(tempFolder);
+
+      if (!fs.existsSync(absoluteTempFolder)) {
+        fs.mkdirSync(absoluteTempFolder, { recursive: true });
       }
+
+      logger.debug(`OCR temp folder: ${absoluteTempFolder}`);
 
       // Convert PDF to images with higher resolution
       const pngPages = await pdfToPng(this.pdfPath, {
         disableFontFace: false,
         useSystemFonts: false,
         viewportScale: 3.0, // Increased from 2.0 for better quality
-        outputFolder: tempFolder  // Use absolute path
+        outputFolder: tempFolder  // Use relative path (works better with pdf-to-png-converter)
       });
 
       logger.info(`Converted PDF to ${pngPages.length} images`);
@@ -124,7 +129,7 @@ class PDFParser {
 
         // Delete PNG files for this batch immediately after processing
         for (const page of batch) {
-          const imagePath = path.join(tempFolder, page.name);
+          const imagePath = path.join(absoluteTempFolder, page.name);
           try {
             if (fs.existsSync(imagePath)) {
               fs.unlinkSync(imagePath);
@@ -137,12 +142,12 @@ class PDFParser {
       }
 
       // Clean up temp folder (should be empty now)
-      if (fs.existsSync(tempFolder)) {
-        const remainingFiles = fs.readdirSync(tempFolder);
+      if (fs.existsSync(absoluteTempFolder)) {
+        const remainingFiles = fs.readdirSync(absoluteTempFolder);
         if (remainingFiles.length > 0) {
           logger.warn(`Found ${remainingFiles.length} remaining files in ocr-temp, cleaning up...`);
         }
-        fs.rmSync(tempFolder, { recursive: true, force: true });
+        fs.rmSync(absoluteTempFolder, { recursive: true, force: true });
         logger.debug('Cleaned up ocr-temp folder');
       }
 
