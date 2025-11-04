@@ -403,6 +403,15 @@ class PDFParser {
 
       logger.debug(`Found ${matches.length} items using "Pos Tarif/HS" pattern`);
 
+      // Debug: Show sample text around "Pos Tarif/HS" to understand format
+      if (matches.length === 0 && this.fullText.includes('Pos Tarif/HS')) {
+        const posTarifIndex = this.fullText.indexOf('Pos Tarif/HS');
+        const start = Math.max(0, posTarifIndex - 200);
+        const end = Math.min(this.fullText.length, posTarifIndex + 500);
+        const sample = this.fullText.substring(start, end).replace(/\n/g, '\\n');
+        logger.debug(`Sample text around "Pos Tarif/HS": ${sample}`);
+      }
+
       this.items = [];
 
       if (matches.length > 0) {
