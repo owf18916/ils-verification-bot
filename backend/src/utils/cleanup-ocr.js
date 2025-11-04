@@ -162,8 +162,8 @@ class OCRCleanup {
       }
 
       // Clean up orphaned Tesseract language data files in root backend folder
-      // (These should be in backend/tessdata/ folder instead)
-      // Use explicit backend directory path since logsDir now points to project root
+      // (Legacy cleanup - old versions created these in wrong location)
+      // Current version uses Tesseract.js default cache, so these are safe to delete
       const backendRoot = path.resolve(__dirname, '../..');  // backend directory
       const orphanedTessFiles = ['ind.traineddata', 'eng.traineddata', 'ind.traineddata.gz', 'eng.traineddata.gz'];
 

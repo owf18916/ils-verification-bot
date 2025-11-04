@@ -182,20 +182,12 @@ class PDFParser {
       // Preprocess image for better OCR accuracy
       const preprocessedImage = await this.preprocessImage(page.content);
 
-      // Configure Tesseract paths to keep language data organized
-      const langPath = path.resolve(__dirname, '../../tessdata');
-
-      // Ensure tessdata folder exists
-      if (!fs.existsSync(langPath)) {
-        fs.mkdirSync(langPath, { recursive: true });
-      }
-
       // Run OCR with Indonesian + English language support
+      // Let Tesseract.js handle language data caching in its default location
       const result = await Tesseract.recognize(
         preprocessedImage,
         'ind+eng', // Indonesian + English for better accuracy
         {
-          langPath: langPath,  // Specify where to store/load language data
           logger: m => {
             if (m.status === 'recognizing text') {
               logger.debug(`Page ${pageNum} OCR progress: ${Math.round(m.progress * 100)}%`);
